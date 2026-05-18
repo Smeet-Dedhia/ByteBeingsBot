@@ -35,3 +35,16 @@ export async function processWorkflow(workflowType: WorkflowType, text: string):
     return null;
   }
 }
+
+export async function generateClarification(workflowType: WorkflowType, extractedData: any): Promise<string> {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `The following data was extracted for workflow '${workflowType}': ${JSON.stringify(extractedData)}. The confidence is low. Please generate a single, short clarification question asking the user for the missing details (e.g. missing owner, missing priority, unclear task). Do not include any greeting or explanation, just the question.`
+    });
+    return response.text || "Could you please provide more details?";
+  } catch (error) {
+    console.error('Gemini API Error (Clarification):', error);
+    return "Could you please provide more details?";
+  }
+}

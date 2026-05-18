@@ -2,7 +2,6 @@ import { WorkflowType, ProcessedOutput } from './types';
 
 export interface UserSession {
   workflow?: WorkflowType;
-  pendingApproval?: ProcessedOutput | null;
 }
 
 export const userSessions: Record<number, UserSession> = {};
