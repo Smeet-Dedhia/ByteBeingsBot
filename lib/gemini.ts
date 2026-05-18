@@ -4,28 +4,49 @@ import { WorkflowType, ProcessedOutput } from './types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const responseSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    summary: { type: Type.STRING, description: 'A brief summary of the input text.' },
-    tasks: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Actionable items extracted.' },
-    confidence: { type: Type.NUMBER, description: 'Confidence score (0-100) based on clarity.' },
-  },
-  required: ['summary', 'tasks', 'confidence'],
-};
-
-export async function processWorkflow(workflowType: WorkflowType, text: string): Promise<ProcessedOutput | null> {
+export async function processWorkflow(workflowType: WorkflowType, text: string, schema?: Record<string, any>): Promise<ProcessedOutput | null> {
   try {
     const workflow = WORKFLOWS[workflowType];
     if (!workflow) throw new Error('Invalid workflow type');
+
+    const rowsSchemaProperties: Record<string, Schema> = {};
+    if (schema) {
+      for (const [key, prop] of Object.entries(schema)) {
+        if (prop.type === 'number') {
+          rowsSchemaProperties[key] = { type: Type.NUMBER, description: `Notion property type: ${prop.type}` };
+        } else {
+          rowsSchemaProperties[key] = { type: Type.STRING, description: `Notion property type: ${prop.type}` + (prop.options ? ` (Valid options: ${prop.options.join(', ')})` : '') };
+        }
+      }
+    } else {
+      // Fallback
+      rowsSchemaProperties['Task'] = { type: Type.STRING };
+    }
+
+    const dynamicResponseSchema: Schema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: { type: Type.STRING, description: 'A brief summary of the input text.' },
+        rows: { 
+          type: Type.ARRAY, 
+          items: { 
+            type: Type.OBJECT, 
+            properties: rowsSchemaProperties
+          }, 
+          description: 'Actionable items extracted matching the Notion schema. For select/status columns, use valid options only. Ensure one row per actionable item.' 
+        },
+        confidence: { type: Type.NUMBER, description: 'Confidence score (0-100) based on clarity.' },
+      },
+      required: ['summary', 'rows', 'confidence'],
+    };
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: text,
       config: {
-        systemInstruction: workflow.systemInstruction,
+        systemInstruction: workflow.systemInstruction + (schema ? `\n\nYour output rows MUST map exactly to the provided Notion schema properties and respect valid options.` : ''),
         responseMimeType: 'application/json',
-        responseSchema: responseSchema,
+        responseSchema: dynamicResponseSchema,
       }
     });
 

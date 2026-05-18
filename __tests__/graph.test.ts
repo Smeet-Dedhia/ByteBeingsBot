@@ -11,7 +11,7 @@ describe('LangGraph Workflow', () => {
   it('should process text, extract data, and pause before action', async () => {
     vi.mocked(gemini.processWorkflow).mockResolvedValue({
       summary: 'Test Summary',
-      tasks: ['Test Task'],
+      rows: [{ Task: 'Test Task' }],
       confidence: 90,
     });
 
@@ -26,7 +26,7 @@ describe('LangGraph Workflow', () => {
     // It should extract data
     expect(finalState.extractedData).toEqual({
       summary: 'Test Summary',
-      tasks: ['Test Task'],
+      rows: [{ Task: 'Test Task' }],
       confidence: 90,
     });
 
@@ -50,12 +50,12 @@ describe('LangGraph Workflow', () => {
     vi.mocked(gemini.processWorkflow)
       .mockResolvedValueOnce({
         summary: 'Incomplete Summary',
-        tasks: ['Task without owner'],
+        rows: [{ Task: 'Task without owner' }],
         confidence: 50, // Low confidence
       })
       .mockResolvedValueOnce({
         summary: 'Complete Summary',
-        tasks: ['Task with owner'],
+        rows: [{ Task: 'Task with owner', Owner: 'Sarah' }],
         confidence: 95, // High confidence after clarification
       });
 
@@ -83,7 +83,7 @@ describe('LangGraph Workflow', () => {
     expect(state.next).toContain('action');
     expect(resumedState.extractedData).toEqual({
       summary: 'Complete Summary',
-      tasks: ['Task with owner'],
+      rows: [{ Task: 'Task with owner', Owner: 'Sarah' }],
       confidence: 95,
     });
     

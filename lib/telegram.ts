@@ -40,7 +40,7 @@ bot.action('approve', async (ctx) => {
       await ctx.reply('Approving and executing action...');
       await workflowGraph.updateState({ configurable: { thread_id: threadId } }, { approved: true });
       await workflowGraph.invoke(null, { configurable: { thread_id: threadId } });
-      await ctx.reply('Approved! Action has been completed.');
+      await ctx.reply('Approved! Action has been pushed to Notion.');
       clearSession(chatId);
     } else {
       await ctx.reply('Nothing to approve or action already executed.');
@@ -67,7 +67,8 @@ async function handleGraphProgress(ctx: any, threadId: string, invokeArgs: any) 
     await ctx.reply(`⚠️ Need Clarification:\n${resultState.clarificationQuestion}`);
   } else if (state.next && state.next.includes("action") && resultState.extractedData) {
     const result = resultState.extractedData;
-    const responseText = `*Summary:*\n${result.summary}\n\n*Tasks:*\n${result.tasks.map((t: string) => `- ${t}`).join('\n')}\n\n*Confidence:* ${result.confidence}%`;
+    const rowsText = result.rows.map((r: any) => `- ${JSON.stringify(r)}`).join('\n');
+    const responseText = `*Summary:*\n${result.summary}\n\n*Extracted Rows:*\n${rowsText}\n\n*Confidence:* ${result.confidence}%`;
     
     await ctx.reply(responseText, {
       parse_mode: 'Markdown',

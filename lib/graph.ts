@@ -1,6 +1,7 @@
 import { StateGraph, MemorySaver, Annotation } from "@langchain/langgraph";
 import { WorkflowType, ProcessedOutput } from "./types";
 import { processWorkflow, generateClarification } from "./gemini";
+import { getDatabaseSchema, dynamicPushToNotion } from "./notion";
 
 // Define the state
 export const GraphState = Annotation.Root({
@@ -13,6 +14,7 @@ export const GraphState = Annotation.Root({
   chatId: Annotation<number>(),
   clarificationQuestion: Annotation<string | null>(),
   clarificationResponse: Annotation<string | null>(),
+  notionSchema: Annotation<Record<string, any> | null>(),
 });
 
 // Nodes
@@ -22,15 +24,25 @@ async function preprocessNode(state: typeof GraphState.State) {
 
 async function extractNode(state: typeof GraphState.State) {
   if (!state.workflowType) throw new Error("Workflow type is required");
-  const result = await processWorkflow(state.workflowType, state.rawInput);
+  
+  let schema = state.notionSchema;
+  if (!schema) {
+    const databaseId = process.env.NOTION_DATABASE_ID;
+    if (databaseId) {
+      schema = await getDatabaseSchema(databaseId);
+    }
+  }
+
+  const result = await processWorkflow(state.workflowType, state.rawInput, schema || undefined);
   
   if (result) {
     return {
       extractedData: result,
-      confidence: result.confidence
+      confidence: result.confidence,
+      notionSchema: schema
     };
   }
-  return { extractedData: null, confidence: 0 };
+  return { extractedData: null, confidence: 0, notionSchema: schema };
 }
 
 async function confidenceNode(state: typeof GraphState.State) {
@@ -56,8 +68,15 @@ async function processClarificationNode(state: typeof GraphState.State) {
 }
 
 async function actionNode(state: typeof GraphState.State) {
-  // Placeholder for Phase 4 Notion Integration
-  console.log("Action Executed for chat:", state.chatId);
+  if (state.workflowType && state.extractedData && state.notionSchema) {
+    try {
+      const databaseId = process.env.NOTION_DATABASE_ID || '';
+      await dynamicPushToNotion(databaseId, state.extractedData.rows, state.notionSchema);
+      console.log("Action Executed and dynamically pushed to Notion for chat:", state.chatId);
+    } catch (e) {
+      console.error("Failed to push to Notion:", e);
+    }
+  }
   return {};
 }
 
