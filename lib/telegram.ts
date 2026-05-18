@@ -8,12 +8,16 @@ const bot = new Telegraf(process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_
 
 bot.command('start', (ctx) => {
   clearSession(ctx.chat.id);
+  const appUrl = (global as any).APP_URL || process.env.NEXT_PUBLIC_APP_URL || '';
+  
+  const buttons = [
+    [Markup.button.callback('Meeting Tasks', 'workflow_meeting_tasks')],
+    [Markup.button.callback('PRD Generator', 'workflow_prd_generator')],
+    [Markup.button.callback('Grocery List', 'workflow_grocery_list')]
+  ];
+
   ctx.reply('Welcome to TeleButtler! Please select a workflow:', 
-    Markup.inlineKeyboard([
-      [Markup.button.callback('Meeting Tasks', 'workflow_meeting_tasks')],
-      [Markup.button.callback('PRD Generator', 'workflow_prd_generator')],
-      [Markup.button.callback('Grocery List', 'workflow_grocery_list')]
-    ])
+    Markup.inlineKeyboard(buttons)
   );
 });
 
@@ -67,15 +71,20 @@ async function handleGraphProgress(ctx: any, threadId: string, invokeArgs: any) 
     await ctx.reply(`⚠️ Need Clarification:\n${resultState.clarificationQuestion}`);
   } else if (state.next && state.next.includes("action") && resultState.extractedData) {
     const result = resultState.extractedData;
-    const rowsText = result.rows.map((r: any) => `- ${JSON.stringify(r)}`).join('\n');
-    const responseText = `*Summary:*\n${result.summary}\n\n*Extracted Rows:*\n${rowsText}\n\n*Confidence:* ${result.confidence}%`;
+    const appUrl = (global as any).APP_URL || process.env.NEXT_PUBLIC_APP_URL || '';
     
+    const responseText = `📋 *Data Extraction Complete!*\n\n*Summary:*\n${result.summary}\n\n*Confidence:* ${result.confidence}%\n\nI have extracted *${result.rows.length} rows*. Click below to view and interact with them in a beautiful table before pushing to Notion!`;
+    
+    const buttons = [];
+    if (appUrl) {
+      buttons.push([Markup.button.webApp('📊 View & Approve Rows', `${appUrl}/table?threadId=${threadId}`)]);
+    }
+    buttons.push([Markup.button.callback('✅ Approve (Text Only)', 'approve')]);
+    buttons.push([Markup.button.callback('🔄 Retry', 'retry')]);
+
     await ctx.reply(responseText, {
       parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        Markup.button.callback('✅ Approve', 'approve'),
-        Markup.button.callback('🔄 Retry', 'retry')
-      ])
+      ...Markup.inlineKeyboard(buttons)
     });
   } else {
     await ctx.reply('Failed to process. Please try again.');

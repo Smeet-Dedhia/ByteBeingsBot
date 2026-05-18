@@ -8,6 +8,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  (global as any).APP_URL = `${proto}://${host}`;
+
   try {
     const body = await req.json();
     await bot.handleUpdate(body);

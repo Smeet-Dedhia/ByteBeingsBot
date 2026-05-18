@@ -100,8 +100,13 @@ const builder = new StateGraph(GraphState)
   .addEdge("processClarification", "extract")
   .addEdge("action", "__end__");
 
-export const checkpointer = new MemorySaver();
+const globalForLangGraph = global as unknown as { checkpointer: MemorySaver };
 
+export const checkpointer = globalForLangGraph.checkpointer || new MemorySaver();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForLangGraph.checkpointer = checkpointer;
+}
 export const workflowGraph = builder.compile({
   checkpointer,
   interruptBefore: ["action", "waitForClarification"],
