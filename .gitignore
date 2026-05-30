@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local design/workflow plan
+telegram_ai_workflow_operator_build_plan.md
