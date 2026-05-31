@@ -1,36 +1,147 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ByteBeingsBot — Supervisor-Worker Multi-Agent System
+
+A modular and highly extensible Telegram bot architecture built with Next.js, TypeScript, Telegraf, and the Google Gemini SDK. The bot utilizes a Supervisor-Worker topology to understand user intents in natural language and delegate tasks dynamically to specialized agent instances.
+
+## Architecture
+
+```
+                    ┌────────────────────────┐
+                    │     User (Telegram)    │
+                    └───────────┬────────────┘
+                                │
+                                ▼
+                    ┌────────────────────────┐
+                    │    Telegram Webhook    │
+                    └───────────┬────────────┘
+                                │
+                                ▼
+                    ┌────────────────────────┐
+                    │     SessionManager     │
+                    └───────────┬────────────┘
+                                │
+                                ▼
+                    ┌────────────────────────┐
+                    │    SupervisorAgent     │
+                    └───────────┬────────────┘
+                                │ (Routes via LLM)
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+┌───────────────────┐                       ┌───────────────────┐
+│    NotionAgent    │                       │    FutureAgent    │
+│ (Workflow Worker) │                       │  (Worker Class)   │
+└───────────────────┘                       └───────────────────┘
+```
+
+1. **SupervisorAgent**: Uses Gemini function calling to decide whether to handle the user's message directly (greetings, meta-questions) or delegate it to a registered specialized agent. It holds a registry of manifests and trigger examples to dynamically generate its routing prompt.
+2. **Specialized Worker Agents**: Independent agent instances extending `BaseAgent` and equipped with custom system instructions and tools.
+3. **SessionManager**: Epicenter of multi-turn chat memory and session persistence. Active sessions run in-memory, while finished sessions are summarized by Gemini and saved to disk.
+4. **Interactive Approval WebApp**: Bridges the Telegram bot to a Next.js interface for manual row selection and preview before saving data to Notion databases.
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
+TELEGRAM_WEBHOOK_SECRET="optional-webhook-secret-token"
+GEMINI_API_KEY="your-gemini-api-key"
+NOTION_API_KEY="your-notion-api-key"
+NOTION_DATABASE_ID="your-default-notion-database-id"
+NEXT_PUBLIC_APP_URL="your-tunnelling-or-deployment-url"
+```
+
+### 2. Install Dependencies & Build
+
+```bash
+npm install
+npm run build
+```
+
+### 3. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. Running Unit Tests
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Adding a New Specialized Agent
 
-To learn more about Next.js, take a look at the following resources:
+Once the infrastructure is live, registering a new specialized worker agent requires only three steps:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Step 1: Create the Agent Class
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a new file `agents/my-custom-agent/index.ts` and extend `BaseAgent`:
 
-## Deploy on Vercel
+```typescript
+import { BaseAgent } from '../base';
+import { AgentManifest, AgentTool } from '../../lib/types';
+import { Type } from '@google/genai';
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+export class MyCustomAgent extends BaseAgent {
+  manifest: AgentManifest = {
+    id: 'custom_agent',
+    name: 'My Custom Agent',
+    description: 'Describe what your specialized agent does in 1-2 clear sentences.',
+    capabilities: ['do_something'],
+    triggerExamples: [
+      'Trigger command example one',
+      'Trigger command example two',
+    ],
+    requiredEnvVars: ['CUSTOM_API_KEY'],
+  };
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+  tools: AgentTool[] = [
+    {
+      declaration: {
+        name: 'do_something_tool',
+        description: 'Explain what this tool does.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            arg1: { type: Type.STRING, description: 'Parameter description' },
+          },
+          required: ['arg1'],
+        },
+      },
+      execute: async (args, context) => {
+        // Implement backend logic
+        return { result: 'Success' };
+      },
+    },
+  ];
+
+  getSystemPrompt(): string {
+    return 'Personality, role, instructions, and safety constraints for your agent.';
+  }
+}
+```
+
+### Step 2: Register the Agent
+
+In `agents/index.ts`, import your new class and register it:
+
+```typescript
+import { MyCustomAgent } from './my-custom-agent';
+
+export function registerAllAgents(): void {
+  if (agentRegistry.getAllAgentIds().length > 0) return;
+
+  agentRegistry.register(new NotionAgent());
+  agentRegistry.register(new MyCustomAgent()); // <-- Add this line
+}
+```
+
+### Step 3: Done!
+
+The **SupervisorAgent** will automatically read the new manifest and trigger examples from the registry at startup. The routing instructions, system prompt, and Telegram `/agents` list update automatically.

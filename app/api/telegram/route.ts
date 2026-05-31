@@ -1,4 +1,5 @@
 import { bot } from '@/lib/telegram';
+import { sessionManager } from '@/lib/session';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
@@ -14,6 +15,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    
+    // Check timeouts periodically on incoming webhooks
+    sessionManager.checkTimeouts().catch(err => {
+      console.error('Error checking session timeouts:', err);
+    });
+
     await bot.handleUpdate(body);
     return NextResponse.json({ status: 'ok' });
   } catch (error) {

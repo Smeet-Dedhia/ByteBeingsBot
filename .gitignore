@@ -42,3 +42,9 @@ next-env.d.ts
 
 # local design/workflow plan
 telegram_ai_workflow_operator_build_plan.md
+
+# session history data
+/data/session_history/
+
+# user data collections
+/data/collections/
