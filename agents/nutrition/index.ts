@@ -43,7 +43,7 @@ export class NutritionAgent extends BaseAgent {
 
           // Call Gemini Vision model to extract receipt data
           const visionResponse = await visionAi.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.1-flash-lite',
             contents: [
               {
                 role: 'user',

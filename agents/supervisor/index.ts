@@ -14,7 +14,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
  * It NEVER processes domain-specific tasks itself.
  */
 export class SupervisorAgent {
-  private model = 'gemini-2.5-flash';
+  private model = 'gemini-3.1-flash-lite';
 
   /**
    * Route a user message to the appropriate agent, or respond directly.

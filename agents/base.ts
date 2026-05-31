@@ -37,7 +37,7 @@ export abstract class BaseAgent implements IAgent {
    * (e.g., a LangGraph pipeline, or calling an external API).
    */
   async execute(context: AgentContext): Promise<AgentResponse> {
-    const model = this.manifest.model || 'gemini-2.5-flash';
+    const model = this.manifest.model || 'gemini-3.1-flash-lite';
     const systemPrompt = this.getSystemPrompt();
 
     // Build Gemini function declarations from our tools

@@ -13,7 +13,7 @@ export async function generateSessionSummary(messages: SessionMessage[]): Promis
     .join('\n');
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.1-flash-lite',
     contents: transcript,
     config: {
       systemInstruction: 'Summarize this conversation in 1-2 sentences. Focus on what the user wanted and what was accomplished. Be concise and factual.',
