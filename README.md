@@ -13,7 +13,7 @@
 
 ### Multi-Agent Telegram Bot
 
-**Route natural language to specialized AI agents. Automate your daily tasks — without building a cross-platform app.**
+**Route natural language to specialized AI agents. Automate daily tasks without building a cross-platform app.**
 
 Built with **Next.js · TypeScript · Telegraf · Google Gemini**
 
@@ -39,12 +39,12 @@ Built with **Next.js · TypeScript · Telegraf · Google Gemini**
 
 | Feature | Description |
 |---|---|
-| 🧠 **Intelligent Router** | A `SupervisorAgent` powered by Gemini function-calling interprets every user message and routes it to the right specialized agent — no slash commands needed. |
-| 🤖 **Specialist Subagents** | Independent agents for Nutrition tracking, link saving, content summarization, Notion databases, and Google Calendar handle their domains with purpose-built tools and system prompts. |
-| 🔁 **Multi-Turn Conversations** | Sessions persist in-memory across multiple messages, so agents remember context within a conversation thread without re-prompting. |
-| 📲 **Telegram Mini Web Apps** | Complex approval flows (e.g. selecting rows before saving to Notion) surface as interactive Telegram Web Apps — no separate mobile app required. |
-| 💾 **Persistent Session History** | When a conversation ends, Gemini generates a structured summary that is persisted to disk and is available for future context retrieval. |
-| 🔌 **Zero-Friction Extensibility** | Registering a new agent takes three steps and zero changes to routing logic. The Supervisor auto-discovers agents via a manifest at startup. |
+| 🧠 **Intelligent Router** | A `SupervisorAgent` powered by Gemini function-calling reads every message and picks the right agent to handle it. No slash commands needed. |
+| 🤖 **Specialist Subagents** | Independent agents for nutrition tracking, link saving, content summarization, Notion databases, and Google Calendar. Each has its own tools and system prompt. |
+| 🔁 **Multi-Turn Conversations** | Sessions stay alive in memory across multiple messages, so agents keep context within a thread without you repeating yourself. |
+| 📲 **Telegram Mini Web Apps** | When an agent needs structured input (e.g. picking rows before saving to Notion), it opens a Next.js UI right inside Telegram. No separate app needed. |
+| 💾 **Persistent Session History** | When a conversation ends, Gemini writes a structured summary to disk. Future sessions can load it back for long-term context. |
+| 🔌 **Easy to Extend** | Adding a new agent takes three steps and touches two files. The router picks it up automatically at startup. |
 
 ---
 
@@ -62,42 +62,42 @@ Built with **Next.js · TypeScript · Telegraf · Google Gemini**
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     SessionManager      │  ← In-memory chat state
-                    │   (multi-turn memory)   │    + disk-persisted history
+                    │     SessionManager      │  <- in-memory chat state
+                    │   (multi-turn memory)   │     + disk-persisted history
                     └────────────┬────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     SupervisorAgent     │  ← Gemini function-calling router
+                    │     SupervisorAgent     │  <- Gemini function-calling router
                     └────────────┬────────────┘
-                                 │  LLM-Driven Routing
+                                 │  routes to...
         ┌──────────┬─────────────┼──────────────┬──────────┐
         ▼          ▼             ▼               ▼          ▼
  ┌───────────┐ ┌────────┐ ┌──────────┐ ┌────────────┐ ┌─────────┐
  │  Notion   │ │  Save  │ │Nutrition │ │ Summarizer │ │Calendar │
- │  Agent   │ │ Later  │ │  Agent   │ │   Agent    │ │  Agent  │ 🚧
+ │  Agent    │ │ Later  │ │  Agent   │ │   Agent    │ │  Agent  │ 🚧
  └───────────┘ └────────┘ └──────────┘ └────────────┘ └─────────┘
                                  │
                       (when approval needed)
                                  ▼
                     ┌─────────────────────────┐
-                    │  Telegram Mini Web App  │  ← Next.js UI embedded in Telegram
+                    │  Telegram Mini Web App  │  <- Next.js UI inside Telegram
                     └─────────────────────────┘
 ```
 
 ### How the Router Works
 
-Every inbound message passes through a single decision layer — the `SupervisorAgent`. It dynamically builds its routing prompt by reading the **manifest** of every registered agent: their `id`, `description`, `capabilities`, and `triggerExamples`. Gemini then selects the right agent via function-calling, or handles the message directly (greetings, meta-questions, ambiguous intents).
+Every message hits the `SupervisorAgent` first. It builds its routing prompt on the fly by reading the **manifest** of every registered agent: their `id`, `description`, `capabilities`, and `triggerExamples`. Gemini picks the right agent via function-calling, or handles it directly for things like greetings and meta-questions.
 
-This means the router has zero hard-coded if/else logic. Adding a new agent automatically updates the Supervisor's understanding of the system.
+There is no hard-coded if/else routing logic anywhere. Adding a new agent automatically updates the Supervisor's view of the system.
 
 ---
 
 ## 💡 Core Innovations
 
-### 1 — Fully Declarative Agent Registration
+### 1. Declarative Agent Registration
 
-Agents are self-describing. Each one publishes a manifest:
+Each agent publishes a manifest describing what it does and what kinds of messages should trigger it:
 
 ```typescript
 manifest: AgentManifest = {
@@ -113,45 +113,45 @@ manifest: AgentManifest = {
 };
 ```
 
-The `SupervisorAgent` reads all registered manifests at startup and auto-generates its routing instructions. No changes to the router are ever needed when an agent is added or removed. This makes the system **open for extension, closed for modification**.
+The `SupervisorAgent` reads all registered manifests at startup and builds its routing instructions from them. You never touch the router when adding or removing an agent.
 
 ---
 
-### 2 — Shared State, Persisted History
+### 2. Shared State + Persisted History
 
-The `SessionManager` is the memory spine of the system.
+The `SessionManager` handles everything to do with memory.
 
 **Within a session (in-memory):**
-- Full message history is accessible to every agent that handles a turn.
-- The `activeAgentId` field enables sticky routing — a follow-up message is routed straight back to the same agent without re-invoking the Supervisor.
-- All agents used and their task outcomes are recorded in `agentsUsed[]`.
+- Full message history is shared across every agent that handles a turn in that conversation.
+- The `activeAgentId` field enables sticky routing: a follow-up message goes straight back to the same agent without hitting the Supervisor again.
+- Every agent invocation and its outcome is recorded in `agentsUsed[]`.
 
-**At session end (persisted to disk):**
-- Gemini generates a structured natural-language summary of the conversation.
-- The summary is written as a JSON file to `data/session_history/` keyed by `chatId` and timestamp.
-- Past summaries can be loaded back to give future sessions long-term context about a user's history.
+**When a session ends (written to disk):**
+- Gemini generates a natural-language summary of the conversation.
+- The summary is saved as a JSON file under `data/session_history/`, keyed by `chatId` and timestamp.
+- Past summaries can be loaded back to give future sessions context about what a user has done before.
 
 ```
 data/
 └── session_history/
-    └── {chatId}_{timestamp}_{sessionId}.json   ← Gemini-generated summary
+    └── {chatId}_{timestamp}_{sessionId}.json
 ```
 
 ---
 
-### 3 — Telegram as a Cross-Platform Runtime
+### 3. Telegram as a Cross-Platform UI Layer
 
-Rather than building and maintaining native iOS/Android/web apps, ByteBeingsBot uses **Telegram Mini Apps** as its UI layer for complex interactions.
+Instead of building and shipping a native iOS/Android app, ByteBeingsBot uses **Telegram Mini Apps** for any interaction that needs a real UI.
 
-When an agent needs structured user input (e.g., previewing and approving rows before they are saved to a Notion database), it generates a one-time approval URL and sends it as an inline button. Tapping the button opens a full **Next.js web interface** rendered inside Telegram's built-in browser — no app store, no separate login, no cross-platform code.
+When an agent needs structured input from the user (e.g. previewing and selecting rows before pushing to Notion), it generates a one-time approval URL and attaches it as an inline button. Tapping it opens a full **Next.js interface** rendered inside Telegram's built-in browser. No App Store. No separate login. No platform-specific code.
 
 ```
-Bot sends inline button → User taps → Next.js Mini App opens inside Telegram
-       ↑                                              ↓
-  Approval stored ← ─ ─ ─ ─ ─ ─ ─ ─  User selects rows & confirms
+Bot sends inline button -> User taps -> Next.js Mini App opens inside Telegram
+       ^                                              |
+  Approval stored <-- -- -- -- -- -- --  User selects rows & confirms
 ```
 
-This gives the bot a rich, interactive UI on every platform Telegram supports — with a single codebase.
+One codebase, every platform Telegram runs on.
 
 ---
 
@@ -170,25 +170,25 @@ NOTION_DATABASE_ID="your-default-notion-database-id"
 NEXT_PUBLIC_APP_URL="your-tunnel-or-deployment-url"
 ```
 
-> You'll need a public HTTPS URL for the Telegram webhook. Use [ngrok](https://ngrok.com) or a deployment platform for local development.
+> You need a public HTTPS URL for the Telegram webhook. Use [ngrok](https://ngrok.com) or any deployment platform during local development.
 
 ### 2. Install & Run
 
 ```bash
 npm install
-npm run dev        # Development server (Next.js)
+npm run dev        # starts the Next.js dev server
 ```
 
 ### 3. Register the Webhook
 
-Once your server is running and publicly accessible, register the webhook with Telegram:
+Once the server is up and reachable, point Telegram at it:
 
 ```
 POST https://api.telegram.org/bot<TOKEN>/setWebhook
 Body: { "url": "https://<your-url>/api/webhook/telegram" }
 ```
 
-### 4. Run Unit Tests
+### 4. Run Tests
 
 ```bash
 npm run test
@@ -198,9 +198,9 @@ npm run test
 
 ## 🔌 Registering a New Agent
 
-Extending the bot with a new specialist takes **three steps** and touches only two files.
+Adding a new specialist takes three steps and touches two files.
 
-### Step 1 — Create the Agent Class
+### Step 1 - Create the Agent Class
 
 ```typescript
 // agents/my-custom-agent/index.ts
@@ -212,7 +212,7 @@ export class MyCustomAgent extends BaseAgent {
   manifest: AgentManifest = {
     id: 'custom_agent',
     name: 'My Custom Agent',
-    description: 'What your agent does, in one or two sentences.',
+    description: 'What your agent does, in a sentence or two.',
     capabilities: ['do_something'],
     triggerExamples: [
       'Example phrase that should route here',
@@ -235,19 +235,19 @@ export class MyCustomAgent extends BaseAgent {
         },
       },
       execute: async (args, context) => {
-        // Your backend logic here
+        // implementation goes here
         return { result: 'Success' };
       },
     },
   ];
 
   getSystemPrompt(): string {
-    return 'Role, personality, instructions, and safety constraints for your agent.';
+    return 'Role, instructions, and constraints for your agent.';
   }
 }
 ```
 
-### Step 2 — Register the Agent
+### Step 2 - Register the Agent
 
 ```typescript
 // agents/index.ts
@@ -257,13 +257,13 @@ export function registerAllAgents(): void {
   if (agentRegistry.getAllAgentIds().length > 0) return;
 
   agentRegistry.register(new NotionAgent());
-  agentRegistry.register(new MyCustomAgent()); // ← Add this line
+  agentRegistry.register(new MyCustomAgent()); // <- add this
 }
 ```
 
-### Step 3 — Done
+### Step 3 - Done
 
-The **SupervisorAgent** reads the new manifest at startup. Routing instructions, the `/agents` command output, and the system prompt all update automatically. No other changes are needed.
+The `SupervisorAgent` picks up the new manifest on next startup. Routing logic, the `/agents` command, and the system prompt all reflect the change with no further edits.
 
 ---
 
@@ -273,17 +273,17 @@ The **SupervisorAgent** reads the new manifest at startup. Routing instructions,
 ByteBeingsBot/
 ├── agents/
 │   ├── base.ts              # BaseAgent abstract class
-│   ├── index.ts             # Agent registry bootstrapper
+│   ├── index.ts             # registers all agents at startup
 │   ├── supervisor/          # SupervisorAgent (router)
 │   ├── notion/              # Notion database agent
-│   ├── save-later/          # Link saving agent
-│   ├── nutrition/           # Meal & macro tracking agent
-│   ├── summarizer/          # Content summarization agent
+│   ├── save-later/          # link saving agent
+│   ├── nutrition/           # meal & macro tracking agent
+│   ├── summarizer/          # content summarization agent
 │   └── calendar/            # 🚧 Google Calendar agent (WIP)
 ├── lib/
-│   ├── session.ts           # SessionManager — memory + persistence
-│   ├── registry.ts          # Agent registry
-│   ├── types.ts             # Shared TypeScript types
+│   ├── session.ts           # SessionManager: memory + persistence
+│   ├── registry.ts          # agent registry
+│   ├── types.ts             # shared TypeScript types
 │   ├── gemini.ts            # Gemini SDK client
 │   ├── notion.ts            # Notion API client
 │   └── telegram.ts          # Telegram/Telegraf helpers
@@ -291,8 +291,8 @@ ByteBeingsBot/
 │   └── api/
 │       └── webhook/         # Next.js API route for Telegram webhook
 ├── data/
-│   └── session_history/     # Persisted session summaries (JSON)
-└── __tests__/               # Unit tests (Vitest)
+│   └── session_history/     # persisted session summaries (JSON)
+└── __tests__/               # unit tests (Vitest)
 ```
 
 ---
