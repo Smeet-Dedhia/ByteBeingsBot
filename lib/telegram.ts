@@ -23,7 +23,7 @@ bot.command('start', async (ctx) => {
     .map(m => `• *${m.name}*: ${m.description}`)
     .join('\n');
 
-  await ctx.reply(
+  await replySafely(ctx,
     `🤖 *Welcome to ByteBeings Bot!*\n\n` +
     `I'm your AI assistant with specialized agents:\n\n` +
     `${agentList}\n\n` +
@@ -31,8 +31,7 @@ bot.command('start', async (ctx) => {
     `Commands:\n` +
     `/done — End the current session\n` +
     `/new — Start a fresh session\n` +
-    `/agents — List available agents`,
-    { parse_mode: 'Markdown' }
+    `/agents — List available agents`
   );
 });
 
@@ -45,7 +44,7 @@ bot.command('agents', async (ctx) => {
     })
     .join('\n\n');
 
-  await ctx.reply(`*Available Agents:*\n\n${agentList}`, { parse_mode: 'Markdown' });
+  await replySafely(ctx, `*Available Agents:*\n\n${agentList}`);
 });
 
 bot.command('done', async (ctx) => {
@@ -126,7 +125,7 @@ bot.on('document', async (ctx) => {
       }
     } else if (result.type === 'direct_response') {
       sessionManager.addMessage(chatId, 'assistant', result.response.message);
-      await ctx.reply(result.response.message, { parse_mode: 'Markdown' });
+      await replySafely(ctx, result.response.message);
     }
   } catch (error: any) {
     await handleTelegramError(ctx, error, 'Failed to process document attachment');
@@ -172,7 +171,7 @@ bot.on('photo', async (ctx) => {
       }
     } else if (result.type === 'direct_response') {
       sessionManager.addMessage(chatId, 'assistant', result.response.message);
-      await ctx.reply(result.response.message, { parse_mode: 'Markdown' });
+      await replySafely(ctx, result.response.message);
     }
   } catch (error: any) {
     await handleTelegramError(ctx, error, 'Failed to process photo attachment');
@@ -240,7 +239,7 @@ bot.on('text', async (ctx) => {
       if (result.type === 'direct_response') {
         // Supervisor responded directly (greeting, help, etc.)
         sessionManager.addMessage(chatId, 'assistant', result.response.message);
-        await ctx.reply(result.response.message, { parse_mode: 'Markdown' });
+        await replySafely(ctx, result.response.message);
 
       } else if (result.type === 'delegation') {
         // Supervisor delegated to an agent
@@ -305,11 +304,10 @@ async function handleTelegramError(ctx: any, error: any, contextMessage: string)
     String(error?.message).toLowerCase().includes('429');
 
   if (isRateLimit) {
-    await ctx.reply(
+    await replySafely(ctx,
       '⚠️ *Gemini API Daily Quota/Rate Limit Exceeded*\n\n' +
       'You have exceeded the Gemini API free tier limit of 20 requests per day.\n\n' +
-      'Please check your Gemini plan/billing details or try again later.',
-      { parse_mode: 'Markdown' }
+      'Please check your Gemini plan/billing details or try again later.'
     );
   } else {
     await ctx.reply(`❌ ${contextMessage}. Please try again.`);
@@ -329,12 +327,26 @@ async function sendAgentResponse(ctx: any, threadId: string, message: string) {
     buttons.push([Markup.button.callback('✅ Approve (Text Only)', `approve_${threadId}`)]);
     buttons.push([Markup.button.callback('🔄 Retry', `retry_${threadId}`)]);
 
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard(buttons)
-    });
+    await replySafely(ctx, message, Markup.inlineKeyboard(buttons));
   } else {
-    await ctx.reply(message, { parse_mode: 'Markdown' });
+    await replySafely(ctx, message);
+  }
+}
+
+/**
+ * Safely sends a Markdown message, falling back to plain text if Telegram Markdown parsing fails.
+ */
+async function replySafely(ctx: any, text: string, extra: any = {}) {
+  try {
+    return await ctx.reply(text, { parse_mode: 'Markdown', ...extra });
+  } catch (error: any) {
+    if (String(error?.description || error?.message).includes('can\'t parse entities')) {
+      console.warn('Markdown parsing failed, falling back to plain text:', error);
+      const cleanExtra = { ...extra };
+      delete cleanExtra.parse_mode;
+      return await ctx.reply(text, cleanExtra);
+    }
+    throw error;
   }
 }
 
