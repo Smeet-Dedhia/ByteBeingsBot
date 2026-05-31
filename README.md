@@ -11,7 +11,7 @@
 
 # ByteBeingsBot
 
-### A Supervisor-Worker Multi-Agent Telegram Bot
+### Multi-Agent Telegram Bot
 
 **Route natural language to specialized AI agents. Automate your daily tasks — without building a cross-platform app.**
 
@@ -298,5 +298,5 @@ ByteBeingsBot/
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/ByteBeings">ByteBeings</a></sub>
+  <sub>Built with ❤️ by <a href="https://ByteBeings.com">ByteBeings</a></sub>
 </div>
