@@ -132,9 +132,8 @@ export abstract class BaseAgent implements IAgent {
         };
       }
 
-      // Process each function call
+      // Check first if there are any immediate terminal responses (respond_to_user / request_followup)
       for (const call of functionCalls) {
-        // Check for our built-in response tools
         if (call.name === 'respond_to_user') {
           return {
             success: (call.args as any).success ?? true,
@@ -151,52 +150,65 @@ export abstract class BaseAgent implements IAgent {
             followUpQuestion: (call.args as any).question,
           };
         }
+      }
 
+      // Append the complete model candidate content to contents history to preserve thought_signature, thoughts, etc.
+      const modelContent = response.candidates?.[0]?.content;
+      if (modelContent) {
+        contents.push(modelContent);
+      } else {
+        contents.push({ role: 'model', parts: [] });
+      }
+
+      // Process and execute all function calls, collecting their results into a single user response turn
+      const responseParts: Part[] = [];
+      for (const call of functionCalls) {
         if (call.name === 'save_to_collection') {
           const args = call.args as { collection: string; data: Record<string, any> };
           const record = await dataStore.insert(args.collection, args.data);
-          contents.push(
-            { role: 'model', parts: [{ functionCall: call } as Part] },
-            { role: 'user', parts: [{ functionResponse: { name: call.name, response: { success: true, id: record.id } } } as Part] }
-          );
-          continue;
-        }
-
-        if (call.name === 'query_collection') {
+          responseParts.push({
+            functionResponse: {
+              name: call.name,
+              response: { success: true, id: record.id }
+            }
+          } as Part);
+        } else if (call.name === 'query_collection') {
           const args = call.args as { collection: string; limit?: number };
           const records = await dataStore.getAll(args.collection, args.limit);
-          contents.push(
-            { role: 'model', parts: [{ functionCall: call } as Part] },
-            { role: 'user', parts: [{ functionResponse: { name: call.name, response: { records } } } as Part] }
-          );
-          continue;
+          responseParts.push({
+            functionResponse: {
+              name: call.name,
+              response: { records }
+            }
+          } as Part);
+        } else {
+          const tool = this.tools.find(t => t.declaration.name === call.name);
+          if (!tool) {
+            responseParts.push({
+              functionResponse: {
+                name: call.name,
+                response: { error: `Unknown tool: ${call.name}` }
+              }
+            } as Part);
+          } else {
+            let toolResult: Record<string, unknown>;
+            try {
+              toolResult = await tool.execute(call.args as Record<string, unknown>, context);
+            } catch (error: any) {
+              toolResult = { error: error.message || 'Tool execution failed' };
+            }
+            responseParts.push({
+              functionResponse: {
+                name: call.name,
+                response: toolResult
+              }
+            } as Part);
+          }
         }
-
-        // It's a custom agent tool — find and execute it
-        const tool = this.tools.find(t => t.declaration.name === call.name);
-        if (!tool) {
-          // Unknown tool — tell the model
-          contents.push(
-            { role: 'model', parts: [{ functionCall: call } as Part] },
-            { role: 'user', parts: [{ functionResponse: { name: call.name, response: { error: `Unknown tool: ${call.name}` } } } as Part] }
-          );
-          continue;
-        }
-
-        // Execute the tool
-        let toolResult: Record<string, unknown>;
-        try {
-          toolResult = await tool.execute(call.args as Record<string, unknown>, context);
-        } catch (error: any) {
-          toolResult = { error: error.message || 'Tool execution failed' };
-        }
-
-        // Feed the result back to the model
-        contents.push(
-          { role: 'model', parts: [{ functionCall: call } as Part] },
-          { role: 'user', parts: [{ functionResponse: { name: call.name, response: toolResult } } as Part] }
-        );
       }
+
+      // Append the collected tool execution responses back as a single user turn
+      contents.push({ role: 'user', parts: responseParts });
     }
 
     // Max iterations reached
